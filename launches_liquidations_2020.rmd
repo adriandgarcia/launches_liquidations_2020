@@ -1,0 +1,166 @@
+---
+title: "Shareclass Activity 2020"
+knit: (function(input_file, encoding) {
+  out_dir <- 'docs';
+  rmarkdown::render(input_file,
+ encoding=encoding,
+ output_file=file.path(dirname(input_file), out_dir, 'index.html'))})
+author: "Adrian D. Garcia"
+date: "June 2020"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+# Intro
+
+## Getting Started
+
+```{r setup, message = FALSE, warning = FALSE}
+
+library(tidyverse) #For Data Analysis
+library(lubridate) #For working with dates
+library(DT) #For visualizing tables
+
+```
+
+Data pulled from Morningstar Direct on Jan. XX, 2020. Files combined using _combine_files.r_. 
+Data in M* filtered:
+
+* != Fund of funds: Yes
+* != Morningstar Category: Money Market - Non-40 ACT
+* != Morningstar Category: Money Market - Taxable
+* != Morningstar Category: Money Market - Taxfree
+
+56,270 rows, 36 columns
+
+Added column _Obsolete_ to indicate if share class is obsolete. I assume a blank Obsolete..Date means the share class still exists.
+
+```{r load, message = FALSE}
+
+Full <- read_csv("data_combined.csv",
+                 guess_max = 20000) %>% 
+  rename_all(make.names) %>% 
+  mutate(Obsolete =
+           case_when(
+             !is.na(Obsolete..Date) ~ "Obsolete",
+             TRUE ~ "Active"
+           ))
+
+# Full_uniq <- vector("double", ncol(Full))
+# names(Full_uniq) <- names(Full)
+# for (i in names(Full)) {
+#   Full_uniq[i] <- n_distinct(Full[[i]])
+# }
+
+```
+
+# Overview
+
+```{r graph_overview, echo=FALSE}
+
+ggplot(data = Full, mapping = aes(x = year(Inception..Date), fill = Obsolete)) +
+  geom_bar(position = "stack") +
+  ggtitle("Fund Launches") +
+  ylab("Count") +
+  xlab("YEAR") +
+  theme_classic() +
+  theme(plot.title = element_text(size = 11, face = "bold"))
+
+```
+
+## Net Count
+
+There was a large drop off in launches in 2020 compared to recent years. However it appears rationalization continued at roughly the same levels as recent years.
+
+Of 56,720 fund share classes examined there are inception dates missing for 84.
+
+```{r data_overview, message=FALSE}
+
+Year_Count <- function(x){
+   Full %>% 
+   mutate(Year = year(x)) %>% 
+  group_by(Year) %>% 
+  summarise(Count = n(), .groups = "drop") %>% 
+  mutate(
+    Pct_Change = round(
+      ((Count/lag(Count) - 1) * 100),
+      1
+    )) %>% 
+  arrange(desc(Year))
+ }
+
+inception_year <- Year_Count(Full$Inception..Date)
+obsolete_year <- Year_Count(Full$Obsolete..Date)
+
+Net_Count <- full_join(inception_year, obsolete_year, by = "Year", suffix = c("_inception", "_obsolete")) %>% 
+  select(-contains("pct_change")) %>% 
+  group_by(Year) %>% 
+  mutate(Net_Count = sum(Count_inception, -Count_obsolete, na.rm = TRUE))
+
+datatable(Net_Count)
+
+```
+
+# Companies
+
+To look at which firms cut or added share classes I first clean up the company names with Branding.Names.Mod. 
+
+```{r companies, message=FALSE}
+
+company_count <- function(x){
+   Full %>% 
+  mutate(
+    Year = year(x),
+    Branding.Name.Mod =
+    case_when(
+      grepl("State Street", Branding.Name) ~ "State Street",
+      grepl("TIAA", Branding.Name) ~ "TIAA/Nuveen",
+      grepl("Nuveen", Branding.Name) ~ "TIAA/Nuveen",
+      grepl("Eaton Vance", Branding.Name) ~ "Eaton Vance/Calvert",
+      grepl("Calvert", Branding.Name) ~ "Eaton Vance/Calvert",
+      grepl("iShares", Branding.Name) ~ "iShares/BlackRock",
+      grepl("BlackRock", Branding.Name) ~ "iShares/BlackRock",
+      grepl("PowerShares", Branding.Name) ~ "PowerShares/Invesco",
+      grepl("Invesco", Branding.Name) ~ "PowerShares/Invesco",
+      grepl("DWS$", Branding.Name) ~ "DWS/Xtrackers",
+      grepl("Xtrackers", Branding.Name) ~ "DWS/Xtrackers",
+      TRUE ~ Branding.Name)) %>% 
+      group_by(Branding.Name.Mod, Year) %>% 
+      summarise(Count = n()) %>% 
+    ungroup()
+   }
+
+comp_inception <- company_count(Full$Inception..Date)
+comp_obsolete <- company_count(Full$Obsolete..Date)
+
+top_launchers <-
+  
+comp_rank <- function(x){
+  x %>%  filter(Year == "2020") %>% 
+  mutate(Rank = rank(-Count)) %>% 
+  filter(Rank <=20) %>% 
+    arrange(Rank)
+}
+
+top_cutters <- comp_rank(comp_obsolete)
+top_launchers <- comp_rank(comp_inception)
+
+```
+
+## Top Launchers
+
+```{r launchers, echo=FALSE}
+
+datatable(top_launchers)
+
+```
+
+## Top Cutters
+
+```{r cutters, echo=FALSE}
+
+datatable(top_cutters)
+
+```
