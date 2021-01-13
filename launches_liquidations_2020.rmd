@@ -103,6 +103,39 @@ datatable(Net_Count)
 
 ```
 
+## New Funds
+
+```{r new_funds, message=FALSE}
+
+New_Funds <- Full %>% 
+  filter(Oldest..Share.Class == "Yes") %>% 
+   mutate(Year = year(Inception..Date)) %>% 
+  group_by(Year) %>% 
+  summarise(Count = n(), .groups = "drop") %>% 
+  mutate(
+    Pct_Change = round(
+      ((Count/lag(Count) - 1) * 100),
+      1
+    )) %>% 
+  arrange(desc(Year))
+
+```
+
+
+```{r new_funds_graphs, echo=FALSE}
+
+ggplot(data = New_Funds, mapping = aes(x =Year, y=Count)) +
+  geom_line() +
+  ggtitle("New Fund Launches") +
+  ylab("Count") +
+  xlab("YEAR") +
+  theme_classic() +
+  theme(plot.title = element_text(size = 11, face = "bold"))
+
+datatable(New_Funds)
+
+```
+
 # Companies
 
 To look at which firms cut or added share classes I first clean up the company names with Branding.Names.Mod. 
