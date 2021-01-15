@@ -135,7 +135,7 @@ merge_type %>%
 New_Funds <- Full %>% 
   filter(Oldest..Share.Class == "Yes") %>% 
    mutate(Year = year(Inception..Date)) %>% 
-  group_by(Year) %>% 
+  group_by(Year, Index..Fund) %>% 
   summarise(Count = n(), .groups = "drop") %>% 
   mutate(
     Pct_Change = round(
@@ -149,7 +149,7 @@ New_Funds <- Full %>%
 
 ```{r new_funds_graphs, echo=FALSE}
 
-ggplot(data = New_Funds, mapping = aes(x =Year, y=Count)) +
+ggplot(data = New_Funds, mapping = aes(x =Year, y=Count, color=Index..Fund)) +
   geom_line() +
   ggtitle("New Fund Launches") +
   ylab("Count") +
@@ -157,7 +157,16 @@ ggplot(data = New_Funds, mapping = aes(x =Year, y=Count)) +
   theme_classic() +
   theme(plot.title = element_text(size = 11, face = "bold"))
 
-datatable(New_Funds)
+New_Funds %>% 
+  select(-Pct_Change) %>% 
+  pivot_wider(names_from = Index..Fund, values_from = Count) %>%
+  rename(
+    Passive = Yes,
+    Active = No
+    ) %>% 
+  group_by(Year) %>% 
+  mutate(total = sum (Active, Passive, na.rm = TRUE)) %>% 
+    datatable()
 
 ```
 
@@ -286,10 +295,125 @@ ggplot(data = share_class_add_count, aes(x = Year, y = Count, fill = Share.Class
   xlab("YEAR") +
   theme_classic() +
   theme(plot.title = element_text(size = 11, face = "bold"))
+```
+
+## 2020
+
+```{r share_class_2020, echo=FALSE}
 
 share_class_add_count  %>% 
   filter(Year == "2020") %>% 
   arrange(desc(Count)) %>% 
   datatable()
+
+```
+
+## TK
+
+```{r share_clas_view, echo=FALSE}
+
+#The data from Morningstar is dirty. This pattern pulls the last letters/digits in the mutual fund name to identify the share class.
+
+PATTERN <-
+  c(
+    "(\\s)?([:alnum:]+)?([:alnum:][:punct:][:alnum:] LW)?( Load Waived)?( LW)?([:punct:]+)?([:alnum:]+)?(-[:alnum:])?(™)?([:alpha:]\\{..\\} LW)?([:punct:]..[:punct:])?(\\s)?([:punct:][:alpha:]+[:punct:])?$"
+  )
+
+#The data from Morningstar is dirty. This pattern refines the pattern above to identify the share class.
+
+CUT <-
+  c(
+    "([:punct:]\\X\\X[:punct:])|([:punct:]\\X\\X$)|(-)|(\\sLW)|(\\sLoad\\sWaived)|(\\([:alpha:]+\\))"
+  )
+
+#The data from Morningstar is dirty. This pattern makes manual changes to share classification for when the patterns above failed.
+
+CHANGE <- c(
+  "^Adm(in$)?(in[:alpha:]+)?$" = "Admin",
+  "[:alnum:]+R6$" = "R6",
+  "(?!AA)[:alpha:]+A$" = "A",
+  "A\\{m" = "A",
+  "([:alpha:]+)([:punct:])?([:alpha:]+)?A$" = "A",
+  "(?![FIVS]+I$|([:alpha:]+)?II$)([:alpha:]+)?I$(?<!(IR$))" = "I",
+  "([:alpha:]+)([:punct:])?([:alpha:]+)?I$(?<!(F/I$))" = "I",
+  "([:alpha:]+)([:punct:])?([:alpha:]+)?C$" = "C",
+  "PlusC([:digit:]+)$" = "C",
+  "([:alpha:]+)?([:Punct:][:alpha:]+)?Inst(l$)?(itutional$)?$" = "Instl",
+  "([:alnum:]+)?Ins$" = "Instl",
+  "([:alnum:]+)?Insl$" = "Instl",
+  "[:alnum:]+Ist$" = "Instl",
+  "([:alpha:]+)?([:punct:])?([:alpha:]+)?Y$" = "Y",
+  "([:alpha:]+)?([:punct:])?([:alpha:]+)?R$(?<!(SDR$)|(IR$))" = "R",
+  "[:alnum:]+R5$" = "R5",
+  "([:alpha:]+)?([:Punct:][:alpha:]+)?In([vest]+)?(ment$)?$(?<!(Int$))" = "Investor",
+  "([:alpha:]+)?([:punct:])?([:alpha:]+)?N$" = "N",
+  "([:alpha:]+)?([:punct:])?([:alpha:]+)?T$" = "T",
+  "[:alnum:]+R4$" = "R4",
+  "([:alpha:]+)?([:Punct:][:alpha:]+)?Adv(iser$)?(isory$)?$" = "Advisor",
+  "([:alpha:]+)?([:Punct:][:alpha:]+)?ADV$" = "Advisor",
+  "([:alpha:]+)?([:punct:])?([:alpha:]+)?K$" = "K",
+  "([:alpha:]+)?([:punct:])?([:alpha:]+)?F$" = "F",
+  "[:alnum:]+R3$" = "R3",
+  "[:alnum:]+F3$" = "F3",
+  "([:alpha:]+)?([:punct:])?([:alpha:]+)?IS$" = "IS",
+  "^I$" = "Instl",
+  "Retire(ment)?$" = "R"
+)
+
+
+#Using the above patterns we can clean the share class information
+#Name -> Extract -> New -> Revision
+
+INC_Data <- Full %>%
+  select(Name) %>%
+  mutate(
+    Match = str_detect(Name, PATTERN),
+    EXTRACT = str_extract(Name, PATTERN),
+    New = str_trim(str_replace_all(EXTRACT,  CUT, "")),
+    Revision = str_replace_all(New, CHANGE)
+    )
+
+#This shows how the names were altered to create the final share class informatin (Revision)
+#The revision counts might be inaccurate.
+INC_Changes <- INC_Data %>%
+  group_by(EXTRACT) %>%
+  summarise(cases = n()) %>%
+  mutate(New = str_trim(str_replace_all(EXTRACT,  CUT, ""))) %>% group_by(New) %>%
+  mutate(replacements = n() - 1,
+         newcases = sum(cases)) %>%
+  mutate(Revision = str_replace_all(New, CHANGE)) %>%
+  group_by(Revision) %>%
+  mutate(replacements1 = (n() - replacements) - 1,
+         newercases = sum(cases))
+
+#This counts the number of share class types in the data
+INC_Summary <- INC_Data %>%
+  group_by(Revision) %>%
+  summarise(cases = n()) %>%
+  arrange(-cases)
+
+INC_MODIFIED <- INCEPTION %>%
+  mutate(
+    Match = str_detect(Name, PATTERN),
+    EXTRACT = str_extract(Name, PATTERN),
+    New = str_trim(str_replace_all(EXTRACT,  CUT, "")),
+    Revision = str_replace_all(New, CHANGE),
+    `Obsolete Year` = year(`Obsolete Date`),
+    `Obsolete Month` = month(`Obsolete Date`),
+    `Inception Year` = year(`Inception Date...4`),
+    `Inception Month` = month(`Inception Date...4`)
+  ) %>%
+  select(Name, 
+         Match, 
+         EXTRACT, 
+         New, 
+         Revision, 
+         2:3,
+         `Obsolete Month`,
+         `Obsolete Year`, 
+         4, 
+         `Inception Month`, 
+         `Inception Year`, 
+         5:22)
 
 ```
