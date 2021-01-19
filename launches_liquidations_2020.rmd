@@ -195,7 +195,7 @@ The oldest inception date related to a _FundID_ is a proxy for when the fund was
 
 There were some cases identified in the data where a FundID had no corresponding _Oldest..Share.Class_. This could be an error or signal that a fund's oldest share class is not captured in the data from Morningstar.
 
-The results for 2020 ended up equal after acounting for the five funds that appear to have launched and been liquidated within 2020. This method considers those funds obsolete.
+The results for 2020 ended up equal using the method above.
 
 This method shows there were 6,224 funds in 2020 vs 6,076 in 2019 -- a change of 148 funds.
 This method shows there were 6,076 funds in 2019 vs 5,876 in 2019 -- a change of 200 funds.
