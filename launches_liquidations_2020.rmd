@@ -298,17 +298,17 @@ This method shows there were 6,076 funds in 2019 vs 5,876 in 2019 -- a change of
 
 status_count <- function(date_v){
   Full %>% 
-  filter((Inception..Date < date_v | is.na(Inception..Date)) &
-           (Obsolete..Date < date_v | is.na(Obsolete..Date))
-         )%>% 
+  filter((Inception..Date < date_v | is.na(Inception..Date))
+         )%>%
+    mutate(Obsolete_Past = Obsolete..Date > date)
   group_by(FundId, Obsolete) %>% 
   summarise(Count = n(), .groups = "drop") %>%
   pivot_wider(names_from = Obsolete, values_from = Count, names_prefix = c("Count_")) %>% 
   mutate(
     Fund_Status = 
       case_when(
-        is.na(Count_Active) & Count_Obsolete >= 1 ~ "Obsolete_Fund",
-        TRUE ~ "Active_Fund"
+        is.na(Count_Exists) & Count_Obsolete >= 1 ~ "Obsolete_Fund",
+        TRUE ~ "Exists_Fund"
       )
   )
 }
@@ -318,15 +318,17 @@ status_count <- function(date_v){
 status_2020 <- status_count("2021-01-01")
 
 #a breakdown of active funds as of Dec. 31, 2020
-active_2020 <- status_2020 %>% 
-  filter(Fund_Status == "Active_Fund")
+status_summary_2020 <- status_2020 %>% 
+  group_by(Fund_Status) %>% 
+  count(name = paste("As_Of_"))
 
 #a breakdown of active vs. obsolete funds as of Dec. 31, 2019
 status_2019 <- status_count("2020-01-01")
 
 #a breakdown of active vs. obsolete funds as of Dec. 31, 2019
-active_2019 <- status_2019 %>% 
-  filter(Fund_Status == "Active_Fund")
+status_summary_2019 <- status_2019 %>% 
+  group_by(Fund_Status) %>% 
+  count(name = paste("As_Of_"))
 
 #a breakdown of active vs. obsolete funds as of Dec. 31, 2018
 status_2018 <- status_count("2019-01-01")
