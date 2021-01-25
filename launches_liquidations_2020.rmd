@@ -17,15 +17,7 @@ output:
 
 ## Getting Started
 
-```{r setup, message = FALSE, warning = FALSE}
-
-library(tidyverse) #For Data Analysis
-library(lubridate) #For working with dates
-library(DT) #For visualizing tables
-
-```
-
-Data pulled from Morningstar Direct on Jan. XX, 2020. Files combined using _combine_files.r_. 
+Data pulled from Morningstar Direct on Jan. 22, 2020. Files combined using _combine_files.r_. 
 Data in M* filtered:
 
 * != Fund of funds: Yes
@@ -33,17 +25,26 @@ Data in M* filtered:
 * != Morningstar Category: Money Market - Taxable
 * != Morningstar Category: Money Market - Taxfree
 
-56,270 rows, 36 columns
+56,284 rows, 36 columns
 
-Added column _Obsolete_ to indicate if share class is obsolete. I assume a blank Obsolete..Date means the share class still exists.
+Added column _Obsolete_ to indicate if share class is in existence or obsolete. I assume a blank Obsolete..Date means the share class still exists.
+
 Also added _Inception_Year_ and _Obsolete_Year_ because these variables are used below.
 
-Data filtered to remove the "Load Waived" Share.Class.Type.
-Data filtered to remove rows where the share class was launched and liquidated during the same calendar year.
-48,517 rows, 39 columns
+Data filtered to remove:
 
+* "Load Waived" Share.Class.Type
+* Share classes launched and liquidated during the same calendar year
+* Share classes launched or liquidated after 2020
 
-```{r load, message = FALSE}
+48,520 rows, 41 columns
+
+```{r setup, message = FALSE, warning = FALSE}
+
+library(tidyverse) #For Data Analysis
+library(lubridate) #For working with dates
+library(DT) #For visualizing tables
+
 
 Full <- read_csv("data_combined.csv",
                  guess_max = 20000) %>% 
@@ -54,21 +55,18 @@ Full <- read_csv("data_combined.csv",
     Obsolete =
            case_when(
              !is.na(Obsolete..Date) ~ "Obsolete",
-             TRUE ~ "Active"
+             TRUE ~ "Exists"
            )) %>% 
   filter(Share.Class.Type != "Load Waived" |
            is.na(Share.Class.Type)) %>% 
   filter((Inception_Year != Obsolete_Year) |
              is.na(Obsolete_Year) |
-             is.na(Inception_Year))
-
-# Full_uniq <- vector("double", ncol(Full))
-# names(Full_uniq) <- names(Full)
-# for (i in names(Full)) {
-#   Full_uniq[i] <- n_distinct(Full[[i]])
-# }
+             is.na(Inception_Year)) %>% 
+  filter(Inception_Year != 2021 |
+           Obsolete_Year != 2021)
 
 ```
+
 
 # Overview
 
@@ -90,7 +88,7 @@ There was a large drop off in launches in 2020 compared to recent years. However
 
 Of 56,720 fund share classes examined there are inception dates missing for 84.
 
-```{r data_overview, message=FALSE}
+```{r data_overview, echo = FALSE, message = FALSE}
 
 #A function to count the number of share classes either created or liquidated each year
 
@@ -114,14 +112,105 @@ Net_Count <- full_join(inception_year, obsolete_year, by = c("Inception_Year" = 
   rename(Year = Inception_Year) %>% 
   group_by(Year) %>% 
   mutate(Net_Count = sum(Count_inception, -Count_obsolete, na.rm = TRUE))
+```
 
-datatable(Net_Count)
+```{r data_overview_tbl, echo = FALSE}
+
+datatable(Net_Count, colnames = c('Share_Classes_Launched' = 3, 'Share_Classes_Cut' = 4))
 
 ```
 
+## By Month
+
+```{r by_month_obsolete, echo =  FALSE}
+
+Obsolete_Month <- function(x){
+  Full %>% 
+  filter(Obsolete_Year == x) %>% 
+  mutate(Month = month(Obsolete..Date)) %>% 
+  group_by(Month) %>% 
+  count(name = paste("Obsolete_", x, sep = "") )
+}
+
+
+Years <- c("2018", "2019", "2020")
+
+By_Month_Obsolete <- Years %>% 
+  map(Obsolete_Month) %>% 
+  reduce(full_join, by = "Month")
+
+```
+
+Share Class Liquidations & Mergers
+
+```{r by_month_inception_graph, echo =  FALSE}
+
+By_Month_Obsolete %>% 
+  pivot_longer(
+    !Month,
+    names_to = "Year",
+    values_to = "Count"
+  ) %>% 
+  mutate(Year = str_replace(Year, "Obsolete_", "")) %>% 
+  ggplot(data = . , aes(x = Month, y = Count, color = Year)) +
+  geom_line() +
+  ggtitle("Liquidations By Month") +
+  ylab("Count") +
+  xlab("Month") +
+  scale_x_continuous(breaks = seq(1, 12, by = 1)) +
+  theme_classic() +
+  theme(plot.title = element_text(size = 11, face = "bold"))
+
+
+```
+
+
+```{r by_month_inception, echo =  FALSE}
+
+Inception_Month <- function(x){
+  Full %>% 
+  filter(Inception_Year == x) %>% 
+  mutate(Month = month(Inception..Date)) %>% 
+  group_by(Month) %>% 
+  count(name = paste("Inception_", x, sep = "") )
+}
+
+
+Years <- c("2018", "2019", "2020")
+
+By_Month_Inception <- Years %>% 
+  map(Inception_Month) %>% 
+  reduce(full_join, by = "Month")
+
+```
+
+Share Class Launches by Month
+
+```{r by_month_obsolete_graph, echo =  FALSE}
+
+By_Month_Inception %>% 
+  pivot_longer(
+    !Month,
+    names_to = "Year",
+    values_to = "Count"
+  ) %>% 
+  mutate(Year = str_replace(Year, "Inception_", "")) %>% 
+  ggplot(data = . , aes(x = Month, y = Count, color = Year)) +
+  geom_line() +
+  ggtitle("Fund Launches") +
+  ylab("Count") +
+  xlab("Month") +
+  scale_x_continuous(breaks = seq(1, 12, by = 1)) +
+  theme_classic() +
+  theme(plot.title = element_text(size = 11, face = "bold"))
+
+
+```
+
+
 ## Liquidations
 
-```{R obsolete_type, echo = FALSE}
+```{r obsolete_type, echo = FALSE}
 
 ggplot(data = merge_type, mapping = aes(x =Obsolete_Year, y = Count, fill = Obsolete..Type)) +
   geom_bar(stat = "identity", position = "stack") +
@@ -201,7 +290,7 @@ This method shows there were 6,224 funds in 2020 vs 6,076 in 2019 -- a change of
 This method shows there were 6,076 funds in 2019 vs 5,876 in 2019 -- a change of 200 funds.
 
 
-```{r fund_id, message = FALSE}
+```{r fund_id, eval = FALSE, message = FALSE}
 
 # a function to count share classes launched/liquidated before a certain date, grouped by their FundId
 # the data is also grouped to show whether a Fund is Obsolete with all share classes having an obsolete date...
@@ -307,7 +396,7 @@ comp_old_funds <- company_count(colz = c("Branding.Name.Mod", "Obsolete_Year", "
 comp_rank <- function(x){
   x %>%  filter(.[[2]] == "2020") %>% 
   mutate(Rank = rank(-Count)) %>% 
-  filter(Rank <=20) %>% 
+  filter(Rank <=20) %>%
     arrange(Rank)
 }
 
