@@ -11,6 +11,7 @@ output:
   html_document:
     toc: true
     toc_float: true
+    code_folding: hide
 ---
 
 # Intro
@@ -88,16 +89,17 @@ There was a large drop off in launches in 2020 compared to recent years. However
 
 Of 48,520 fund share classes examined there are inception dates missing for 83.
 
-```{r data_overview, echo = FALSE, message = FALSE}
+```{r data_overview, echo = TRUE, message = FALSE}
 
 #A function to count the number of share classes either created or liquidated each year
 
 Year_Count <- function(colz){
-   Full %>%
+ Full %>%
     group_by_at(colz) %>% 
     summarise(Count = n(), .groups = "drop") %>% 
     arrange(desc(.[[1]]))
     }
+    
 
 inception_year <- Year_Count(colz = c("Inception_Year")) #Tallys share classes by year created
 obsolete_year <- Year_Count(colz = c("Obsolete_Year")) #Tallys share classes by year liquidated
@@ -122,7 +124,7 @@ datatable(Net_Count, colnames = c('Share_Classes_Launched' = 3, 'Share_Classes_C
 
 ## By Month
 
-```{r by_month_obsolete, echo =  FALSE}
+```{r by_month_obsolete, echo =  TRUE}
 
 Obsolete_Month <- function(x){
   Full %>% 
@@ -186,7 +188,7 @@ By_Month_Inception <- Years %>%
 
 Share Class Launches by Month
 
-```{r by_month_obsolete_graph, echo =  FALSE}
+```{r by_month_obsolete_graph, echo =  TRUE}
 
 By_Month_Inception %>% 
   pivot_longer(
@@ -287,46 +289,61 @@ There were some cases identified in the data where a FundID had no corresponding
 The results for 2020 ended up equal using the method above.
 
 This method shows there were 15,825 funds in 2020 vs 15,677 in 2019 -- a change of 148 funds.
-This method shows there were 15,464 in 2019 -- a change of 213 funds.
+This method shows there were 15,464 in 2018 -- a change of 213 funds.
 
 
 ```{r fund_id, echo = FALSE, message = FALSE}
 
 # a function to count share classes launched/liquidated before a certain date, grouped by their FundId
-# the data is also grouped to show whether a Fund is Obsolete with all share classes having an obsolete date...
-# or actie where at least one share class does NOT have an obsolete date in the data
 
 status_count <- function(date_v) {
+  #prefix for column names created by pivot_wider
   prefix <- paste("Count_", year(date_v), "_", sep = "")
-  obnow <- paste("Count_", year(date_v), "_", "Obsolete_Now", sep = "")
-  oblater <- paste("Count_", year(date_v), "_", "Obsolete_Later", sep = "")
-  exsts <- paste("Count_", year(date_v), "_", "Exists", sep = "")
+  #variable to later call Aldready_Obsolete column
+  obnow <- paste("Count_", year(date_v), "_", "Already_Obsolete", sep = "")
+  #variable to later call Becomes_Obsolete column
+  oblater <- paste("Count_", year(date_v), "_", "Becomes_Obsolete", sep = "")
+  #variable to later call Not_Obsolete column
+  exsts <- paste("Count_", year(date_v), "_", "Not_Obsolete", sep = "")
+  #dataframe
   Full %>%
+    #filter to look at only funds that were created before a certain date
     filter((Inception..Date < date_v | is.na(Inception..Date))) %>%
+    #creates new column to determine if a share class becomes obsolete after date_v
     mutate(
       Obsolete_Past =
         case_when(
-          Obsolete..Date >= date_v ~ "Obsolete_Later",
-          Obsolete..Date < date_v ~ "Obsolete_Now",
-          is.na(Obsolete..Date) ~ "Exists",
+          #obsolete dates on or after date_v mean share class becomes obsolete
+          Obsolete..Date >= date_v ~ "Becomes_Obsolete",
+          #obsolete dates before date_v mean share class already obsolete
+          Obsolete..Date < date_v ~ "Already_Obsolete",
+          #blank obsolete dats mean the fund is not obsolete
+          is.na(Obsolete..Date) ~ "Not_Obsolete",
+          #if above criteria not met throws "ERROR"
           TRUE ~ "ERROR"
         )
     ) %>%
     group_by(FundId, Obsolete_Past) %>%
+    #counts how many share classes in each fund (FundID) are obsolete using Obsolete_Past
     summarise(Count = n(), .groups = "drop") %>%
+    #Turns dataframe wider so each Obsolete_Past catagory has its own column
     pivot_wider(
       names_from = Obsolete_Past,
       values_from = Count,
       names_prefix = c(prefix)
     )  %>%
+    #Adds New Column that determines the overall status of the fund based on share classes
     mutate(
       !!paste0("Fund_Status_", year(date_v)) :=
         case_when(
+          #Zero Not_Obsolete or Becomes_Obsolete share classes with at least one Already_Obsolete sc equals an Obsolete_Fund
           is.na(!!sym(exsts)) &
             is.na(!!sym(oblater)) &
             !!sym(obnow) >= 1 ~ "Obsolete_Fund",
+          #Zero Not_Obsolete share classes with at least 1 Becomes_Obsolete sc equals a fund that Becomes_Obsolete
           is.na(!!sym(exsts)) &
             !!sym(oblater) >= 1 ~ "Obsolete_Later",
+          #At least one share class that is Not_Obsolete means the fund exists as of date_v
           !is.na(!!sym(exsts)) ~ "Exists_Fund",
           TRUE ~ "Other"
         ))
@@ -364,10 +381,9 @@ status_summary_2018 <- status_summary(status_2018)
 
 To look at which firms cut or added share classes I first clean up the company names with Branding.Names.Mod. 
 
-```{r companies, message=FALSE}
+```{r companies, echo = TRUE}
 
-company_count <- function(x, colz){
-   Full %>% 
+company_change <- Full %>% 
   mutate(
     Branding.Name.Mod =
     case_when(
@@ -382,9 +398,12 @@ company_count <- function(x, colz){
       grepl("Invesco", Branding.Name) ~ "PowerShares/Invesco",
       grepl("DWS$", Branding.Name) ~ "DWS/Xtrackers",
       grepl("Xtrackers", Branding.Name) ~ "DWS/Xtrackers",
-      TRUE ~ Branding.Name)) %>% 
-      group_by_at(colz) %>% 
-      summarise(Count = n()) %>% 
+      TRUE ~ Branding.Name))
+
+company_count <- function(x, colz){
+  company_change %>% 
+    group_by_at(colz) %>% 
+    summarise(Count = n()) %>% 
     ungroup() %>% 
     arrange(desc(.[[2]]))
    }
@@ -451,6 +470,128 @@ datatable(top_cutters)
 ```{r old_cutters, echo=FALSE}
 
 datatable(top_old_cutters)
+
+```
+
+## tk
+I
+```{r tktk, eval = FALSE, echo=FALSE}
+
+status_comp_count <- function(date_v, comp) {
+  #prefix for column names created by pivot_wider
+  prefix <- paste("Count_", year(date_v), "_", sep = "")
+  #variable to later call Aldready_Obsolete column
+  obnow <- paste("Count_", year(date_v), "_", "Already_Obsolete", sep = "")
+  #variable to later call Becomes_Obsolete column
+  oblater <- paste("Count_", year(date_v), "_", "Becomes_Obsolete", sep = "")
+  #variable to later call Not_Obsolete column
+  exsts <- paste("Count_", year(date_v), "_", "Not_Obsolete", sep = "")
+  #dataframe
+  company_change %>%
+    #filter to look at only funds that were created before a certain date
+    filter((Inception..Date < date_v | is.na(Inception..Date)) & grepl(comp, Branding.Name.Mod)) %>%
+    #creates new column to determine if a share class becomes obsolete after date_v
+    mutate(
+      Obsolete_Past =
+        case_when(
+          #obsolete dates on or after date_v mean share class becomes obsolete
+          Obsolete..Date >= date_v ~ "Becomes_Obsolete",
+          #obsolete dates before date_v mean share class already obsolete
+          Obsolete..Date < date_v ~ "Already_Obsolete",
+          #blank obsolete dats mean the fund is not obsolete
+          is.na(Obsolete..Date) ~ "Not_Obsolete",
+          #if above criteria not met throws "ERROR"
+          TRUE ~ "ERROR"
+        )
+    ) %>%
+    group_by(FundId, Obsolete_Past) %>%
+    #counts how many share classes in each fund (FundID) are obsolete using Obsolete_Past
+    summarise(Count = n(), .groups = "drop") %>%
+    #Turns dataframe wider so each Obsolete_Past catagory has its own column
+    pivot_wider(
+      names_from = Obsolete_Past,
+      values_from = Count,
+      names_prefix = c(prefix)
+    )  %>%
+    #Adds New Column that determines the overall status of the fund based on share classes
+    mutate(
+      !!paste0("Fund_Status_", year(date_v)) :=
+        case_when(
+          #Zero Not_Obsolete or Becomes_Obsolete share classes with at least one Already_Obsolete sc equals an Obsolete_Fund
+          is.na(!!sym(exsts)) &
+            is.na(!!sym(oblater)) &
+            !!sym(obnow) >= 1 ~ "Obsolete_Fund",
+          #Zero Not_Obsolete share classes with at least 1 Becomes_Obsolete sc equals a fund that Becomes_Obsolete
+          is.na(!!sym(exsts)) &
+            !!sym(oblater) >= 1 ~ "Obsolete_Later",
+          #At least one share class that is Not_Obsolete means the fund exists as of date_v
+          !is.na(!!sym(exsts)) ~ "Exists_Fund",
+          TRUE ~ "Other"
+        ))
+  }
+
+
+
+CT <- status_comp_count(
+  date_v = "2020-01-01",
+  comp = "Threadneedle") %>% 
+  group_by(Fund_Status_2020) %>% 
+  count()
+
+
+TROWE <- company_change %>% 
+  filter(grepl("Rowe", Branding.Name.Mod) & Obsolete_Year == 2020) %>% 
+  group_by(FundId, Name.of..Fund.s..Oldest.Share.Class, Fund.Size..Base..Currency) %>% 
+  summarise() %>% 
+  unique()
+  
+  company_change %>% 
+  filter(grepl("Fidelity", Branding.Name.Mod))
+
+# a <- Fidelity %>%
+#     group_by(Obsolete_Year, Obsolete..Type) %>% 
+#     summarise(Count = n(), .groups = "drop") %>% 
+#     arrange(desc(.[[1]]))
+
+date_v <- "2020-01-01"
+prefix <- paste("Count_", year(date_v), "_", sep = "")
+  obnow <- paste("Count_", year(date_v), "_", "Obsolete_Now", sep = "")
+  oblater <- paste("Count_", year(date_v), "_", "Obsolete_Later", sep = "")
+  exsts <- paste("Count_", year(date_v), "_", "Exists", sep = "")
+
+b <- Fidelity %>%
+    filter((Inception..Date < date_v | is.na(Inception..Date))) %>%
+    mutate(
+      Obsolete_Past =
+        case_when(
+          Obsolete..Date >= date_v ~ "Obsolete_Later",
+          Obsolete..Date < date_v ~ "Obsolete_Now",
+          is.na(Obsolete..Date) ~ "Exists",
+          TRUE ~ "ERROR"
+        )
+    ) %>%
+    group_by(FundId, Obsolete_Past) %>%
+    summarise(Count = n(), .groups = "drop") %>%
+    pivot_wider(
+      names_from = Obsolete_Past,
+      values_from = Count,
+      names_prefix = c(prefix)
+    )  %>%
+    mutate(
+      !!paste0("Fund_Status_", year(date_v)) :=
+        case_when(
+          is.na(!!sym(exsts)) &
+            is.na(!!sym(oblater)) &
+            !!sym(obnow) >= 1 ~ "Obsolete_Fund",
+          is.na(!!sym(exsts)) &
+            !!sym(oblater) >= 1 ~ "Obsolete_Later",
+          !is.na(!!sym(exsts)) ~ "Exists_Fund",
+          TRUE ~ "Other"
+        ))
+
+c <- b %>% filter(Fund_Status_2020 == "Obsolete_Later")
+
+
 
 ```
 
