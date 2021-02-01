@@ -474,7 +474,7 @@ datatable(top_old_cutters)
 ```
 
 ## tk
-I
+
 ```{r tktk, eval = FALSE, echo=FALSE}
 
 status_comp_count <- function(date_v, comp) {
@@ -630,26 +630,8 @@ ggplot(data = share_class_add_count, aes(x = Inception_Year, y = Count, fill = S
 
 ```{r share_class_2020_launches, echo=FALSE}
 
-share_class_add_count <- simp_count(colz = c("Inception_Year", "Share.Class.Type"))
-
-
 share_class_add_count  %>% 
   filter(Inception_Year == "2020") %>% 
-  arrange(desc(Count)) %>% 
-  datatable()
-
-```
-
-
-## 2020 Liquidations
-
-```{r share_class_2020_cuts, echo=FALSE}
-
-share_class_cut_count <- simp_count(colz = c("Obsolete_Year", "Share.Class.Type"))
-
-
-share_class_cut_count  %>% 
-  filter(Obsolete_Year == "2020") %>% 
   arrange(desc(Count)) %>% 
   datatable()
 
@@ -674,6 +656,16 @@ ggplot(data = share_class_cut_count, aes(x = Obsolete_Year, y = Count, fill = Sh
 
 ```
 
+## 2020 Liquidations
+
+```{r share_class_2020_cuts, echo=FALSE}
+
+share_class_cut_count  %>% 
+  filter(Obsolete_Year == "2020") %>% 
+  arrange(desc(Count)) %>% 
+  datatable()
+
+```
 
 ## Other/NA
 
@@ -779,9 +771,6 @@ INC_Data %>%
 
 ```
 
-
-
-
 ## Inception Year
 (2020)
 
@@ -790,7 +779,7 @@ INC_Data %>%
 INC_MODIFIED %>%
   select(Name, Share.Class.Type, Revision, Share_Class_Mod, Inception_Year, Obsolete_Year) %>% 
   filter(Inception_Year == 2020 | Inception_Year == 2019) %>% 
-  group_by(Revision, Inception_Year) %>%
+  group_by(Share_Class_Mod, Inception_Year) %>%
   summarise(cases = n()) %>%
   arrange(-cases)  %>% 
   datatable()
@@ -806,7 +795,7 @@ INC_MODIFIED %>%
 INC_MODIFIED %>%
   select(Name, Share.Class.Type, Revision, Share_Class_Mod, Inception_Year, Obsolete_Year) %>% 
   filter(Obsolete_Year == 2020 | Obsolete_Year == 2019) %>% 
-  group_by(Revision, Obsolete_Year) %>%
+  group_by(Share_Class_Mod, Obsolete_Year) %>%
   summarise(cases = n()) %>%
   arrange(-cases)  %>% 
   datatable()
